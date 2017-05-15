@@ -2,6 +2,10 @@
 
 The code will be released before conference. 
 
+## Dependencies
+* Dynet(2.0)
+* Numpy
+
 ## Citation
 ```
 @InProceedings{cheng2017virnng, 
@@ -13,3 +17,5 @@ The code will be released before conference.
   publisher = {Association for Computational Linguistics} 
  }
 ```
+## Contact
+jianpeng.cheng@ed.ac.uk
