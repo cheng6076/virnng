@@ -1,4 +1,4 @@
-# A Generative Parser with Linear-time Discriminative Recognition
+# A Generative Parser with a (linear-time) Discriminative Recognition Algorithm
 
 The code will be released before conference. 
 
