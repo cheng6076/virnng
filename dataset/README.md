@@ -1,1 +1,1 @@
-same preprocessing (oracle generator) as RNNG
+Same preprocessing (oracle generator) as RNNG. Expect train/valid/test.oracle
