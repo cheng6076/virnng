@@ -22,7 +22,7 @@ if __name__ == '__main__':
     parser.add_option("--save_every",  type="int", dest="save_every",  default=10000)
     parser.add_option("--data_augment", action='store_true',  dest="data_augment", default=False)
     # optimization misc
-    parser.add_option("--lr",          type="float", dest="lr",            default=0.01)
+    parser.add_option("--lr",          type="float", dest="lr",            default=1)
     parser.add_option("--lrdecay",     type="float", dest="decay",         default=0.75)
     parser.add_option("--enc_dropout", type="float", dest="enc_dropout",   default=0.2)
     parser.add_option("--dec_dropout", type="float", dest="dec_dropout",   default=0.2)

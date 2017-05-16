@@ -1,10 +1,15 @@
-# A Generative Parser with a (linear-time) Discriminative Recognition Algorithm
+# Generative Constituency Parser with (linear-time) Discriminative Recognition Algorithm
 
 The code will be released before conference. 
 
 ## Dependencies
-* Dynet(2.0)
+* Dynet (2.0)
 * Numpy
+
+## Instructions
+* Training (supervised\_enc, supervised\_dec, unsupervised)
+* Testing (lm, parsing)
+* Focused training depending on the final objective: if parsing is the goal, focus on maximizing q(a|x) and p(a|x); if lm is the goal, focus on maximizing p(x)
 
 ## Citation
 ```
