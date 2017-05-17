@@ -9,7 +9,7 @@ The code will be released before conference.
 ## Instructions
 * Training (supervised\_enc, supervised\_dec, unsupervised)
 * Testing (lm, parsing)
-* Focused training depending on the final objective: if parsing is the goal, focus on maximizing q(a|x) and p(a|x); if lm is the goal, focus on maximizing p(x)
+* Focused training depending on the final objective: if parsing is the goal, focus on maximizing q(a|x) and p(a|x); if language modeling is the goal, focus on maximizing p(x)
 
 ## Citation
 ```

@@ -156,7 +156,7 @@ class Decoder:
                         parent_embedding = stack[len(stack)-1-i][2]
                         break
                 parser_state = dy.concatenate([parent_embedding, act_summary, buffer_embedding, stack_embedding])
-                h = dy.rectify(self.W_mlp * parser_state + self.b_mlp)
+                h = dy.tanh(self.W_mlp * parser_state + self.b_mlp)
                 if dropout > 0:
                     h = dy.dropout(h, dropout)
                 log_probs = dy.log_softmax(self.W_act * h + self.b_act, valid_actions)
