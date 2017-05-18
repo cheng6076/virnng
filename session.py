@@ -66,8 +66,8 @@ class Session(object):
 
                 if i!=0 and i % self.options.save_every == 0:
                     print('computing loss on validation set...')
-                    valid = self.reader.next_example(1) 
-                    valid_size = len(self.reader.data[1])
+                    valid = self.reader.next_example(2) #fix this
+                    valid_size = len(self.reader.data[2])
                     rf = open(self.options.result_dir+'result', 'w')
                     for vdata in valid:
                         s1, s2, s3, pos, act = vdata[0], vdata[1], vdata[2], vdata[3], vdata[4]
@@ -193,32 +193,33 @@ class Session(object):
                 else:
                     dec_trainer.update()
 
-                # compute baseline and backprop to theta_b
-                b = baseline(s3)
-                logpxb = b.scalar_value()
-                b_loss = dy.squared_distance(b, dy.scalarInput(logpx))
-                b_loss.value()
-                b_loss.backward()
+                if self.options.enc_update > 0:
+                    # compute baseline and backprop to theta_b
+                    b = baseline(s3)
+                    logpxb = b.scalar_value()
+                    b_loss = dy.squared_distance(b, dy.scalarInput(logpx))
+                    b_loss.value()
+                    b_loss.backward()
 
-                # update baseline
-                if self.options.optimizer == 'sgd':
-                    baseline_trainer.update(lr)
-                else:
-                    baseline_trainer.update()
+                    # update baseline
+                    if self.options.optimizer == 'sgd':
+                        baseline_trainer.update(lr)
+                    else:
+                        baseline_trainer.update()
 
-                # policy and and regularization loss backprop to theta_e 
-                enc_loss_act = encoder.train(s1, s2, s3, pos, act)
-                enc_loss_policy = enc_loss_act * dy.scalarInput((logpx - logpxb) / len(s1))
-                enc_loss_total = enc_loss_policy - enc_loss_act * dy.scalarInput(self.options.enc_reg)
-                enc_loss_total = enc_loss_total * dy.scalarInput(1.0 / self.options.mcsamples)
-                enc_loss_total.value()
-                enc_loss_total.backward()
+                    # policy and and regularization loss backprop to theta_e 
+                    enc_loss_act = encoder.train(s1, s2, s3, pos, act)
+                    enc_loss_policy = enc_loss_act * dy.scalarInput((logpx - logpxb) / len(s1))
+                    enc_loss_total = enc_loss_policy * dy.scalarInput(self.options.enc_update) - enc_loss_act * dy.scalarInput(self.options.enc_reg)
+                    enc_loss_total = enc_loss_total * dy.scalarInput(1.0 / self.options.mcsamples)
+                    enc_loss_total.value()
+                    enc_loss_total.backward()
 
-                # update encoder
-                if self.options.optimizer == 'sgd':
-                    enc_trainer.update(lr)
-                else:
-                    enc_trainer.update()
+                    # update encoder
+                    if self.options.optimizer == 'sgd':
+                        enc_trainer.update(lr)
+                    else:
+                        enc_trainer.update()
 
                 e = float(i) / train_size
                 if i % self.options.print_every == 0:
@@ -233,7 +234,6 @@ class Session(object):
                     for vdata in valid:
                         s1, s2, s3, pos, act = vdata[0], vdata[1], vdata[2], vdata[3], vdata[4]
                         _, _, valid_word_loss = decoder.compute_loss(s3, act)
-                        # this measure may be not correct
                         if valid_word_loss is not None:
                             total_valid_loss += valid_word_loss.scalar_value()
                     total_valid_loss = total_valid_loss * 1.0 / valid_size
@@ -299,18 +299,19 @@ class Session(object):
                 else:
                     dec_trainer.update()
 
-                # policy and and regularization loss backprop to theta_e 
-                enc_loss_act = encoder.train(s1, s2, s3, pos, act)
-                enc_loss_policy = enc_loss_act * dy.scalarInput((logpx - logpxb) / len(s1))     
-                enc_loss_total = enc_loss_policy - enc_loss_act * dy.scalarInput(self.options.enc_reg)
-                enc_loss_total = enc_loss_total * dy.scalarInput(1.0 / self.options.mcsamples)
-                enc_loss_total.value()
-                enc_loss_total.backward()
+                if self.options.enc_update > 0:
+                    # policy and and regularization loss backprop to theta_e 
+                    enc_loss_act = encoder.train(s1, s2, s3, pos, act)
+                    enc_loss_policy = enc_loss_act * dy.scalarInput((logpx - logpxb) / len(s1))     
+                    enc_loss_total = enc_loss_policy * dy.scalarInput(self.options.enc_update) - enc_loss_act * dy.scalarInput(self.options.enc_reg)
+                    enc_loss_total = enc_loss_total * dy.scalarInput(1.0 / self.options.mcsamples)
+                    enc_loss_total.value()
+                    enc_loss_total.backward()
 
-                if self.options.optimizer == 'sgd':
-                    enc_trainer.update(lr)
-                else:
-                    enc_trainer.update()
+                    if self.options.optimizer == 'sgd':
+                        enc_trainer.update(lr)
+                    else:
+                        enc_trainer.update()
 
                 e = float(i) / train_size
                 if i % self.options.print_every == 0:
