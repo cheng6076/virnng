@@ -21,7 +21,7 @@ class Decoder:
                 self.i2w_nt[len(self.i2w_nt)] = action
 
         vocab_nt = len(self.i2w_nt)
-        vocab_actions = len(self.i2w_act)
+        self.vocab_actions = len(self.i2w_act)
         vocab_word = len(self.i2w_word)
 
         self.pW_input = self.model.add_parameters((lstm_dim, pretrained_dim+ word_dim))    
@@ -33,8 +33,8 @@ class Decoder:
         self.pW_mlp = self.model.add_parameters((lstm_dim, lstm_dim * 4))
         self.pb_mlp = self.model.add_parameters((lstm_dim, ))
 
-        self.pW_act = self.model.add_parameters((vocab_actions, lstm_dim))
-        self.pb_act = self.model.add_parameters((vocab_actions, ))
+        self.pW_act = self.model.add_parameters((self.vocab_actions, lstm_dim))
+        self.pb_act = self.model.add_parameters((self.vocab_actions, ))
         self.pW_word = self.model.add_parameters((vocab_word, lstm_dim))
         self.pb_word = self.model.add_parameters((vocab_word, ))
 
@@ -44,7 +44,7 @@ class Decoder:
 
         self.word_lookup = self.model.add_lookup_parameters((vocab_word, word_dim))
         self.pretrained_lookup = self.model.add_lookup_parameters((vocab_word, pretrained_dim))
-        self.act_lookup = self.model.add_lookup_parameters((vocab_actions, action_dim))
+        self.act_lookup = self.model.add_lookup_parameters((self.vocab_actions, action_dim))
         self.nt_lookup = self.model.add_lookup_parameters((vocab_nt, word_dim))
 
         self.pempty_buffer_emb = self.model.add_parameters((lstm_dim, ))
@@ -156,7 +156,7 @@ class Decoder:
                         parent_embedding = stack[len(stack)-1-i][2]
                         break
                 parser_state = dy.concatenate([parent_embedding, act_summary, buffer_embedding, stack_embedding])
-                h = dy.tanh(self.W_mlp * parser_state + self.b_mlp)
+                h = dy.rectify(self.W_mlp * parser_state + self.b_mlp)
                 if dropout > 0:
                     h = dy.dropout(h, dropout)
                 log_probs = dy.log_softmax(self.W_act * h + self.b_act, valid_actions)
@@ -222,4 +222,113 @@ class Decoder:
         total_loss_word = -dy.esum(losses_word)
 
         return dy.esum([total_loss_act, total_loss_word]), total_loss_act, total_loss_word 
+
+
+    def sample(self, toks):
+        ''' return log p(x|a) with one sampled a from the prior p(a)'''
+        dy.renew_cg()
+        self.load_params()
+
+        toks = list(toks)
+
+        stack = []
+        stack_top = self.stackRNN.initial_state()
+        state_buffer = self.buffRNN.initial_state()
+        state_act = self.actRNN.initial_state()
+
+        tok_embeddings, buffer = self.encode_sentence(toks)
+        toks.reverse()
+        buffer.reverse()
+
+        buffer_embedding = self.empty_buffer_emb
+        reducable = 0 
+        losses_word = []
+
+        while not (len(stack) == 1 and len(buffer) == 0):
+            # based on parser state, get valid actions
+            valid_actions = []
+            if len(stack) == 0:
+                valid_actions += [self.w2i_act['NT(TOP)']]
+            if len(buffer) > 0 and len(stack) > 0:
+                valid_actions += self.NT
+                valid_actions += [self.SHIFT]
+            if (len(stack) >= 2 and reducable != 0) or len(buffer) == 0: 
+                valid_actions += [self.REDUCE]
+
+            action = valid_actions[0]
+            log_probs = None
+            if len(valid_actions) > 1 or (len(stack) > 0 and valid_actions[0] != self.REDUCE):
+                stack_embedding = stack[-1][0].output() 
+                act_summary = state_act.output()
+                for i in range(len(stack)):
+                    if stack[len(stack)-1-i][1] == 'p':
+                        parent_embedding = stack[len(stack)-1-i][2]
+                        break
+                parser_state = dy.concatenate([parent_embedding, act_summary, buffer_embedding, stack_embedding])
+                h = dy.rectify(self.W_mlp * parser_state + self.b_mlp)
+                log_probs = dy.log_softmax(self.W_act * h + self.b_act, valid_actions)
+          
+                probs = np.exp(log_probs.npvalue() * 0.8)
+                probs = list(probs / probs.sum())
+                action = np.random.choice(range(self.vocab_actions), 1, p=probs)[0]
+                assert (action in valid_actions)                 
+
+            act_embedding = self.W_input_act * self.act_lookup[action]
+            state_act = state_act.add_input(act_embedding)
+
+            # execute the action to update the parser state
+            if action == self.SHIFT:
+                log_probs_word = dy.log_softmax(self.W_word * h + self.b_word)
+                tok = toks.pop()
+                losses_word.append(dy.pick(log_probs_word, self.w2i_word[tok]))
+
+                buffer_embedding = buffer.pop()
+                tok_embedding = tok_embeddings.pop()
+                tok_embedding = self.W_input_ter * tok_embedding
+                stack_state, _, _ = stack[-1] if stack else (stack_top, 'r', stack_top)
+                stack_state = stack_state.add_input(tok_embedding)
+                stack.append((stack_state, 'c', tok_embedding))
+
+            elif action in self.NT:
+                stack_state, _, _ = stack[-1] if stack else (stack_top, 'r', stack_top)
+                nt_embedding = self.W_input_nt * self.nt_lookup[self.w2i_nt[self.i2w_act[action]]]
+                stack_state = stack_state.add_input(nt_embedding)
+                stack.append((stack_state, 'p', nt_embedding))
+
+            else:
+                found_parent = 0
+                path_input = []
+                composed_rep = []
+                while found_parent != 1:
+                    top = stack.pop()
+                    top_raw_rep, top_label, top_rep = top[2], top[1], top[0]
+                    path_input.append(top_raw_rep)
+                    if top_label == 'p': found_parent = 1
+
+                nt_emb = path_input.pop()
+                if len(path_input) > 0:
+                    composed_rep = dy.average(path_input)
+                else:
+                    composed_rep = self.zero_composed_emb
+
+                top_stack_state, _, _ = stack[-1] if stack else (stack_top, 'r', stack_top)
+                composed_embedding = dy.rectify(self.W_input_composed * dy.concatenate([composed_rep, nt_emb]))
+                top_stack_state = top_stack_state.add_input(composed_embedding)
+                stack.append((top_stack_state, 'c', composed_embedding))    
+
+            if stack[-1][1] == 'p':
+                reducable = 0
+            else:
+                count_p = 0
+                for item in stack:
+                    if item[1] == 'p': count_p += 1
+                if not (count_p == 1 and len(buffer)>0) :
+                    reducable = 1
+                else:
+                    reducable = 0
+      
+        total_loss_word = -dy.esum(losses_word)
+
+        return total_loss_word 
+
 
