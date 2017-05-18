@@ -13,6 +13,8 @@ The code implements a neural sequence-to-tree model in the context of constituen
 * For language modeling, there are three choices: 1) lower bound approximation; 2) importance sampling using variational distribution as proposal; and 3) directly sampling from prior
 * Focused training depending on the final objective: if parsing is the goal, we focus on maximizing ```q(a|x)``` and ```p(a|x)```; if language modeling is the goal, we focus on maximizing ```p(x)```
 
+## Extra feature
+To experiment the encoder without look-ahead attention feature, replace ```encoder.py``` with ```encoder_no_attention.py```. 
 
 ## Citation
 ```
